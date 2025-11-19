@@ -1,0 +1,894 @@
+{
+  "name": "RápidoLog Transportadora",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rapidolog/inbound",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -912,
+        -352
+      ],
+      "id": "6d49ab3c-1d70-454c-a7ce-30786db4440c",
+      "name": "Webhook",
+      "webhookId": "cb028847-0e64-4a20-ac1b-237120bcd6e8"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1e2733b3-3740-4288-839e-0efe5441178c",
+              "name": "session_id",
+              "value": "={{$json.body.from}}",
+              "type": "string"
+            },
+            {
+              "id": "06b2012c-a280-44fc-90e3-04e3d9595914",
+              "name": "message_text",
+              "value": "={{$json.body.message}}",
+              "type": "string"
+            },
+            {
+              "id": "1fcef1f0-fb66-45fd-81bd-50dfae3e90a5",
+              "name": "timestamp",
+              "value": "={{$now}}",
+              "type": "string"
+            },
+            {
+              "id": "8c0d7a33-c3e1-49ea-a83d-14581a84b042",
+              "name": "ticket_id",
+              "value": "={{ $json.body.from }}\n",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -752,
+        -352
+      ],
+      "id": "57fa3809-2b78-471c-8654-eb6b58f71b43",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.intent}}",
+                    "rightValue": "faq",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "96ff95d2-19bc-4085-be0d-7eba00e3e45f"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "740589d7-c85b-4faf-9aaa-92ad13c0ea74",
+                    "leftValue": "={{$json.intent}}",
+                    "rightValue": "rastreamento",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2b362fde-172f-4f2c-9f5a-f096ba5fb948",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "abertura_ticket",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        80,
+        -368
+      ],
+      "id": "d81cc08b-4c6e-47bd-90cc-ea4ed0a1b056",
+      "name": "Trocar por intenção"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      session_id: $json.session_id,\n      message_text: $json.message_text,\n      timestamp: $json.timestamp,\n      question: $json.message_text, \n    // a própria pergunta do cliente\n    },\n  },\n];\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        -368
+      ],
+      "id": "458b0175-311d-4529-a481-2180d1e71459",
+      "name": "Preparar pergunta Faq"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  id,\n  doc,\n  section,\n  text,\n  similarity\nFROM public.match_chunks(\n  $1,\n  1\n);\n\n",
+        "options": {
+          "queryReplacement": "={{ $json[\"question\"] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        512,
+        -368
+      ],
+      "id": "cb0d2943-23d1-45e2-89b4-b30ee7f3a8b3",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "mbbTKNqoYUw2KNOn",
+          "name": "Postgres OPENS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pegamos o JSON atual\nconst json = $json;\n\n// Mensagem original do usuário\nconst message = json.message_text || '';\n\n// 1) Tenta usar o código vindo das entidades (melhor fonte)\nlet trackingCode = json.entities?.codigo_rastreio || null;\n\n// 2) Se não tiver nas entidades, tenta achar no texto com regex\nif (!trackingCode) {\n  // Padrão típico: 2 letras + 9 dígitos + 2 letras (ex: RL2024001234BR)\n  const regex = /\\b[A-Z]{2}\\d{9}[A-Z]{2}\\b/gi;\n  const match = message.match(regex);\n  trackingCode = match ? match[0].toUpperCase() : null;\n}\n\nreturn {\n  json: {\n    ...json,\n    tracking_code: trackingCode,\n    has_tracking_code: !!trackingCode,\n  },\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        -48
+      ],
+      "id": "ef9a01b3-c25d-462a-9a23-221a5cd8f683",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "url": "https://x8ki-letl-twmt.n7.xano.io/api:PeoS2V70/rastreamentos",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "codigo_rastreio",
+              "value": "={{ $json.tracking_code }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -352,
+        -48
+      ],
+      "id": "6e7ce07d-f970-42ef-9b46-4b46997db1a5",
+      "name": "HTTP Request",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $json; // resposta do HTTP ou do Set de simulação\n\nconst status = item.status; // ex: \"EM_TRANSITO\"\nlet explicacao;\n\nswitch (status) {\n  case 'POSTADO':\n    explicacao = 'Sua encomenda foi recebida pela RápidoLog e está registrada em nosso sistema. Agora ela será separada e preparada para transporte.';\n    break;\n  case 'EM_PROCESSAMENTO':\n    explicacao = 'Seu pacote está no centro de distribuição de origem sendo separado e preparado para transporte.';\n    break;\n  case 'EM_TRANSITO':\n    explicacao = 'Sua encomenda está viajando entre centros de distribuição, a caminho do destino final.';\n    break;\n  case 'SAIU_PARA_ENTREGA':\n    explicacao = 'Sua encomenda está com o entregador, a caminho do endereço de destino. Fique atento, a entrega deve acontecer hoje.';\n    break;\n  case 'ENTREGUE':\n    explicacao = 'Sua encomenda foi entregue com sucesso!';\n    break;\n  // ... e assim por diante com base no doc\n  default:\n    explicacao = 'Recebemos um status que não está mapeado, mas sua encomenda segue em processamento em nossa rede.';\n}\n\nreturn {\n  json: {\n    ...item,\n    explicacao,\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        -48
+      ],
+      "id": "15ddfc86-7de4-4fbd-9ed1-9b543fd90b6a",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1) Texto cru vindo do OpenAI em message.content / mensagem.conteúdo\nconst raw =\n  ($json.mensagem && ($json.mensagem.conteúdo || $json.mensagem.content)) ||\n  ($json.message && $json.message.content) ||\n  \"{}\";\n\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  parsed = { intent: \"outro\", entities: {} };\n}\n\n// 2) Pega os dados originais do cliente lá do node \"Edit Fields\"\nconst original = $node[\"Edit Fields\"].json;\n\n// 3) Monta o objeto final com tudo que vamos usar depois\nreturn [\n  {\n    json: {\n      intent: parsed.intent || \"outro\",\n      entities: parsed.entities || {},\n      session_id: original.session_id,\n      message_text: original.message_text,\n      timestamp: original.timestamp,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        -352
+      ],
+      "id": "9403761e-73af-4107-910e-53472de99818",
+      "name": "FAQ"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1) Resposta crua do HTTP (Xano)\n// Se o HTTP estiver vazio, o $json provavelmente será um array vazio ou um objeto.\n// Aqui estou assumindo que o HTTP node devolve um array de registros.\nconst data = $json;\n\n// 2) Verifica se veio algum dado real da API\nconst hasData = Array.isArray(data) && data.length > 0;\n\n// 3) Se tiver dados reais, usa o primeiro registro.\n//    Como a API está vazia, montamos um mock fixo com base no código de rastreio.\nconst rastreio = hasData ? data[0] : {\n  codigo_rastreio: $json.tracking_code || 'RL2024001234BR',\n  status: 'EM_TRANSITO',\n  origem: 'Campinas - SP',\n  destino: 'Salvador - BA',\n  ultima_atualizacao: '2025-11-14T14:22:00Z',\n  previsao_entrega: '2025-11-18',\n};\n\n// 4) Retorna o objeto de rastreio como saída do node\nreturn {\n  json: rastreio,\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        -48
+      ],
+      "id": "78ba033f-82cb-4b35-b1f5-0031df5ef815",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "content": "OPENS",
+        "height": 1056,
+        "width": 2048,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -960,
+        -656
+      ],
+      "typeVersion": 1,
+      "id": "bcac4c24-dff6-4987-a29a-47d25d8d90fd",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "FAQ",
+        "height": 192,
+        "width": 1984,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -928,
+        -384
+      ],
+      "typeVersion": 1,
+      "id": "3fe27ab3-3302-4aec-beb5-f45ad56ea5a3",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "RASTREAMENTO",
+        "height": 272,
+        "width": 1280,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -656,
+        -144
+      ],
+      "typeVersion": 1,
+      "id": "9bb0496f-d4e1-4a81-bb8c-4926c649ea15",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tickets",
+          "mode": "list",
+          "cachedResultName": "tickets"
+        },
+        "limit": 1,
+        "where": {
+          "values": [
+            {
+              "column": "session_id text",
+              "value": "={{ $json.session_id }}"
+            }
+          ]
+        },
+        "sort": {
+          "values": [
+            {
+              "column": "data_abertura",
+              "direction": "DESC"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -592,
+        -352
+      ],
+      "id": "609907db-1fe9-4777-8ad8-15943234f9c8",
+      "name": "memoria",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "mbbTKNqoYUw2KNOn",
+          "name": "Postgres OPENS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gera um ID único simples (você pode usar outro método se quiser)\nfunction gerarId() {\n  return 'TCK-' + Date.now();\n}\n\n// Monta a estrutura base do ticket\nconst ticket = {\n  ticket_id: gerarId(),\n  data_abertura: new Date().toISOString(),\n  tipo_problema: null,\n  nome: null,\n  telefone: null,\n  email: null,\n  codigo_rastreio: $json.entities?.codigo_rastreio || null,\n  descricao: null,\n  prioridade: \"normal\",\n  status: \"aberto\"\n};\n\n// Envia para o próximo nó\nreturn [\n  {\n    json: {\n      ticket: ticket,\n      etapa: \"inicio_ticket\",\n      mensagem_usuario: $json.message_text\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        208
+      ],
+      "id": "7f3c148b-9fbd-403e-8455-f0e0b717a8b5",
+      "name": "Prepara ticket"
+    },
+    {
+      "parameters": {
+        "content": "ABERTURA DE TICKET",
+        "height": 240,
+        "width": 1280,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -656,
+        144
+      ],
+      "typeVersion": 1,
+      "id": "8989c43f-a54a-4e39-9580-6c5855a2a90e",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recebe o JSON retornado pelo modelo no nó anterior\nconst dados = $json;\n\n// Garantir estrutura mínima\nconst ticket = {\n  ticket_id: dados.ticket_id || `TKT-${Date.now()}`,\n  nome: dados.nome?.trim() || \"Não informado\",\n  telefone: dados.telefone || \"\",\n  email: dados.email || null,\n  codigo_rastreio: dados.codigo_rastreio || \"\",\n  tipo_problema: dados.tipo_problema || \"outro\",\n  descricao: dados.descricao || \"\",\n  status: \"aberto\",\n  data_abertura: new Date().toISOString()\n};\n\n// 💡 Normalizações importantes\n\n// Email vazio vira null\nif (!ticket.email || ticket.email.trim() === \"\") {\n  ticket.email = null;\n}\n\n// Corrigir tipo_problema\nconst tiposValidos = [\"atraso\",\"extravio\",\"avaria\",\"devolucao\",\"outro\"];\nif (!tiposValidos.includes(ticket.tipo_problema)) {\n  ticket.tipo_problema = \"outro\";\n}\n\n// Garantir formato do código de rastreio\nticket.codigo_rastreio = ticket.codigo_rastreio.toUpperCase();\n\n// Retorno preparado para o Postgres\nreturn [\n  { json: ticket }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        208
+      ],
+      "id": "717f6528-5a9b-4e52-907f-749ef0e93fa9",
+      "name": "Finalizar Ticket"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, text \nFROM public.chunks\nWHERE embedding IS NULL;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -400,
+        -576
+      ],
+      "id": "ece451c1-21b6-42e4-98f4-7e099cea5153",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "mbbTKNqoYUw2KNOn",
+          "name": "Postgres OPENS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-3-small\",\n  \"input\": \"={{ $json.text }}\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -80,
+        -576
+      ],
+      "id": "d9b8510a-4ed2-4d69-ac93-459248048a98",
+      "name": "HTTP Request1",
+      "credentials": {
+        "openAiApi": {
+          "id": "xDHokBHCpD7hbvr4",
+          "name": "OPENS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.chunks\nSET embedding = $1\nWHERE id = $2;\n",
+        "options": {
+          "queryReplacement": "={{ $json[\"data\"][0][\"embedding\"] }}{{ $items(\"Execute a SQL query1\")[$itemIndex].json[\"id\"] }}\n\n"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        192,
+        -576
+      ],
+      "id": "850680ad-145c-47af-81d1-7b1d5a34e413",
+      "name": "Execute a SQL query2",
+      "credentials": {
+        "postgres": {
+          "id": "mbbTKNqoYUw2KNOn",
+          "name": "Postgres OPENS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "Embeddings",
+        "height": 192,
+        "width": 848,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -448,
+        -608
+      ],
+      "typeVersion": 1,
+      "id": "006ad1ee-b41b-4326-a33f-2711e76d7da0",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Você é um atendente da RápidoLog seu nome é Bia, voce tem um jeito carismatico.\nResponda sempre em português do Brasil, de forma amigável e clara.\nExplique para o cliente o status da encomenda com base nos dados que eu enviar.\n\nIMPORTANTE — regras de comportamento:\n'Oie, meu nome é Bia  atendente virtual da RápidoLog '"
+            },
+            {
+              "content": "=Dados de rastreamento da encomenda:\n\n- Código: {{$json[\"codigo_rastreio\"]}}\n- Status: {{$json[\"status\"]}}\n- Origem: {{$json[\"origem\"]}}\n- Destino: {{$json[\"destino\"]}}\n- Última atualização: {{$json[\"ultima_atualizacao\"]}}\n- Previsão de entrega: {{$json[\"previsao_entrega\"]}}\n- Explicação: {{$json[\"explicacao\"]}}\n\nGere uma resposta amigável explicando para o cliente onde está a encomenda, em que etapa do processo ela está e qual a previsão de entrega.\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        304,
+        -48
+      ],
+      "id": "a8437f2c-a8a9-4bc5-8c44-3e302e119aa5",
+      "name": "Rastreamento",
+      "credentials": {
+        "openAiApi": {
+          "id": "xDHokBHCpD7hbvr4",
+          "name": "OPENS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Você é um atendente virtual da RápidoLog seu nome é Bia, voce tem um jeito carismatico.\n\nUse APENAS as informações da base de conhecimento abaixo para responder ao cliente.\n\nIMPORTANTE — regras de comportamento:\n-Sempre se apresente com carisma 'Oie, meu nome é Bia  atendente virtual da RápidoLog '\n- Não invente informações que não estejam na base.\n- Mas NUNCA responda apenas “não sei”.\n- Se a base não tiver a resposta, ofereça uma solução prática (rastreamento ou abertura de chamado).\n- Responda sempre de forma clara, educada e objetiva.\n- Máximo 3 frases.\n\nFALLBACK INTELIGENTE:\nSe a pergunta for sobre entrega, prazo, rastreamento, atraso, localização do pedido ou andamento da encomenda, e a base NÃO tiver um trecho que responda claramente:\n→ então responda assim:\n\"Você pode consultar o status pelo rastreamento. Se o prazo estiver fora do normal, posso abrir um chamado para verificar.\"\n\nPergunta do cliente:\n\"{{$item(0).$node[\"Preparar pergunta Faq\"].json[\"question\"]}}\"\n\nTrecho da base de conhecimento (FAQ):\nSeção: \"{{$json[\"section\"]}}\"\nConteúdo: \"{{$json[\"text\"]}}\"\n\nResponda em português do Brasil e não mencione que está lendo uma base de conhecimento.\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        736,
+        -368
+      ],
+      "id": "7b2f4a59-9e36-470e-b059-87dc9f19b158",
+      "name": "FAQ1",
+      "credentials": {
+        "openAiApi": {
+          "id": "xDHokBHCpD7hbvr4",
+          "name": "OPENS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Você é um classificador de intenções para o SAC da RápidoLog.\n\nSua tarefa é ler a última mensagem do cliente (e, se existir, o histórico) e retornar APENAS um JSON VÁLIDO, em uma única linha, SEM nenhum texto antes ou depois.\n\nFormato EXATO de saída:\n{\"intent\":\"faq|rastreamento|abertura_ticket|outro\",\"entities\":{\"codigo_rastreio\":\"<ou null se não tiver>\"}}\n\nRegras de intenção:\n- Use \"faq\" para dúvidas gerais sobre prazos, preços, serviços, política, cobertura, funcionamento etc.\n- Use \"rastreamento\" quando o usuário quiser saber onde está a encomenda OU quando enviar um código de rastreio (ex: RL2024001234BR).\n- Use \"abertura_ticket\" quando o usuário estiver reclamando de atraso, extravio, avaria, devolução, pedido não entregue, pedido errado ou qualquer problema que pareça exigir atendimento humano.\n- Use \"outro\" para qualquer mensagem que não se encaixe nas opções acima.\n\nRegras para \"entities\":\n- Se encontrar um código de rastreio no texto (geralmente começa com RL, seguido de números e termina com BR, ex: RL2024001234BR), preencha \"codigo_rastreio\" com esse valor.\n- Se não houver código de rastreio, retorne \"codigo_rastreio\": null.\n\nRegras gerais:\n- Não explique sua escolha.\n- Não escreva nada além do JSON.\n- Use sempre letras minúsculas em \"intent\".\n- O JSON deve ser sempre bem formatado, com aspas duplas.\n\n",
+              "role": "system"
+            },
+            {
+              "content": "=Histórico da conversa deste ticket (se existir). Use como contexto, mas responda sempre apenas à última pergunta do usuário.\n\n{{ $json.memoria || 'Sem histórico anterior.' }}\n\n",
+              "role": "system"
+            },
+            {
+              "content": "={{ $('Webhook').item.json.body.message }}{{ $('Edit Fields').item.json.ticket_id }}{{ $('Edit Fields').item.json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -416,
+        -352
+      ],
+      "id": "11356c57-ccf4-45f7-a6c0-34e317ba923c",
+      "name": "FAQ2",
+      "credentials": {
+        "openAiApi": {
+          "id": "xDHokBHCpD7hbvr4",
+          "name": "OPENS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Você é um assistente especializado em abertura de tickets da RápidoLog.\nSua missão é coletar os seguintes dados de forma educada e 100% guiada:\n\n1. Nome completo\n2. Telefone\n3. Código de rastreio (ex: RL2024001234BR)\n4. Tipo do problema (atraso, extravio, avaria, devolucao, outro)\n5. Descrição detalhada do problema\n6. Confirmar com o usuário antes de salvar\n\nMuito importante:\n- Pergunte **um campo por vez**\n- Nunca assuma nada; sempre confirme\n- Caso o usuário responda algo incompleto, peça novamente\n- Mantenha mensagens curtas, claras e humanas\n- Se já houver dados no JSON de entrada, pule para o próximo campo\nQuando terminar de coletar todas as informações, responda APENAS com um JSON puro, sem texto extra, exatamente nesse formato:\n\n{\n  \"ticket_id\": \"string\",\n  \"nome\": \"string\",\n  \"telefone\": \"string\",\n  \"email\": \"string ou null\",\n  \"codigo_rastreio\": \"string\",\n  \"tipo_problema\": \"atraso | extravio | avaria | devolucao | outro\",\n  \"descricao\": \"string\",\n  \"status\": \"aberto\"\n}\n\n- Não coloque explicações fora do JSON.\n- Não coloque comentários.\n- Sempre preencha \"status\" com \"aberto\".\n- Se não tiver email, coloque null.\n- Não escreva mensagens humanas no final. Sua resposta FINAL deve ser SOMENTE o JSON.\n",
+              "role": "system"
+            },
+            {
+              "content": "={{JSON.stringify($json)}}\n"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -384,
+        208
+      ],
+      "id": "2748e36c-c7a3-41f1-b8be-ab7a70d9c0c5",
+      "name": "Abertura de chamado",
+      "credentials": {
+        "openAiApi": {
+          "id": "xDHokBHCpD7hbvr4",
+          "name": "OPENS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Você é Bia, atendente virtual da RápidoLog, carismática, educada e responsável por abrir chamados. \nSempre inicie com:\n\"Oie, meu nome é Bia, atendente virtual da RápidoLog 💛\"\n\nSeu objetivo é abrir um ticket seguindo estritamente os dados fornecidos pelo JSON do fluxo.\nNUNCA invente informações, NUNCA avance etapas sozinho e NUNCA pergunte algo já informado.\n\nVocê SEMPRE recebe um JSON com:\n{\n  ticket: {\n    nome,\n    telefone,\n    codigo_rastreio,\n    tipo_problema,\n    descricao\n  },\n  proxima_etapa: string,\n  modelo_respondeu: string\n}\n\nRegras gerais:\n- Pergunte apenas UMA coisa por vez.\n- Seja curto, simpático e direto.\n- Use sempre português do Brasil.\n- Se o cliente demonstrar frustração, responda com empatia:\n  \"Entendo sua frustração, vou te ajudar a resolver isso! Preciso abrir um chamado urgente para nossa equipe.\"\n- NÃO improvise. Siga somente o valor de `proxima_etapa`.\n\nREGRAS POR ETAPA:\n\nSe `proxima_etapa` for \"perguntar_nome\":\n  → pergunte: \"Qual é o seu nome completo?\"\n\nSe `proxima_etapa` for \"perguntar_telefone\":\n  → pergunte: \"Pode me informar seu telefone com DDD?\"\n\nSe `proxima_etapa` for \"perguntar_codigo\":\n  → pergunte: \"Qual é o código de rastreio ou número do pedido?\"\n\nSe `proxima_etapa` for \"perguntar_tipo\":\n  → pergunte: \"Qual é o tipo do problema? Atraso, extravio, avaria, devolução ou outro?\"\n\nSe `proxima_etapa` for \"perguntar_descricao\":\n  → pergunte: \"Pode me descrever rapidamente o que está acontecendo?\"\n\nSe `proxima_etapa` for \"confirmar_dados\":\n  → faça um resumo curto:\n    \"Entendi! Vou registrar assim:\n     - Nome: {{ticket.nome}}\n     - Telefone: {{ticket.telefone}}\n     - Código: {{ticket.codigo_rastreio}}\n     - Tipo: {{ticket.tipo_problema}}\n     - Descrição: {{ticket.descricao}}\n    Está tudo certinho para eu abrir o chamado?\"\n\nSe `proxima_etapa` for \"finalizado\":\n  → diga:\n    \"Perfeito! Chamado aberto com sucesso! Se precisar de mais alguma coisa, estou aqui 💛\"\n\nNUNCA responda nada fora desse fluxo.\nNUNCA crie soluções próprias.\nApenas siga a etapa atual e responda exatamente com a pergunta ou mensagem correspondente.\n",
+              "role": "system"
+            },
+            {
+              "content": "={{ JSON.stringify($json) }}\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        304,
+        208
+      ],
+      "id": "a71927f7-5a1c-4036-a793-d645aa866ed2",
+      "name": "Abertura de chamado1",
+      "credentials": {
+        "openAiApi": {
+          "id": "xDHokBHCpD7hbvr4",
+          "name": "OPENS"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "memoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trocar por intenção": {
+      "main": [
+        [
+          {
+            "node": "Preparar pergunta Faq",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepara ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar pergunta Faq": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "FAQ1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Rastreamento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FAQ": {
+      "main": [
+        [
+          {
+            "node": "Trocar por intenção",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "memoria": {
+      "main": [
+        [
+          {
+            "node": "FAQ2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepara ticket": {
+      "main": [
+        [
+          {
+            "node": "Abertura de chamado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalizar Ticket": {
+      "main": [
+        [
+          {
+            "node": "Abertura de chamado1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FAQ1": {
+      "main": [
+        []
+      ]
+    },
+    "FAQ2": {
+      "main": [
+        [
+          {
+            "node": "FAQ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Abertura de chamado": {
+      "main": [
+        [
+          {
+            "node": "Finalizar Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2a7fc9e9-d334-499e-a115-2d5f0961c2ca",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7b2f00c61de172afec3e9623c7ed56d683cd3ddbc6518689f6f3758e0e9a584f"
+  },
+  "id": "rTvSzUh9AgDRHNul",
+  "tags": []
+}
